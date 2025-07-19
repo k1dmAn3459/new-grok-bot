@@ -36,10 +36,11 @@ app.post('/ask-gemini', async (req, res) => {
   const { question } = req.body;
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(question);
+    const result = await model.generateContent([{ role: 'user', parts: [{ text: question }] }]);
     const response = await result.response;
     res.json({ answer: response.text() });
   } catch (error) {
+    console.error('ask-gemini error:', error.message);
     res.status(500).json({ answer: `Ошибка: ${error.message}` });
   }
 });
@@ -58,10 +59,13 @@ app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
 
     try {
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const result = await model.generateContent([
-        ...history[chatId].slice(-10), // Последние 10 сообщений
-        { role: 'user', parts: [{ text: question }] }
-      ]);
+      // Формируем контент для Gemini API
+      const contents = history[chatId].slice(-10).map(item => ({
+        role: item.role,
+        parts: [{ text: item.parts[0].text }]
+      }));
+      console.log('Gemini API request:', JSON.stringify(contents, null, 2));
+      const result = await model.generateContent(contents);
       const response = await result.response;
       const answer = response.text();
 
@@ -71,6 +75,7 @@ app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
 
       await bot.sendMessage(chatId, answer);
     } catch (error) {
+      console.error('Bot error:', error.message);
       await bot.sendMessage(chatId, `Ошибка: ${error.message}`);
     }
   }
