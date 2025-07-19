@@ -58,14 +58,9 @@ app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
 
     try {
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      // Формируем контент для Gemini API
-      const contents = history[chatId].slice(-10).map(item => ({
-        role: item.role,
-        parts: item.parts
-      }));
       const result = await model.generateContent([
-        { parts: [{ text: 'You are a helpful assistant.' }] },
-        ...contents
+        ...history[chatId].slice(-10), // Последние 10 сообщений
+        { role: 'user', parts: [{ text: question }] }
       ]);
       const response = await result.response;
       const answer = response.text();
