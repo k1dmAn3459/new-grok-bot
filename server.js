@@ -53,19 +53,25 @@ app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
     const history = await loadHistory();
     if (!history[chatId]) history[chatId] = [];
 
-    history[chatId].push({ role: 'user', content: question });
+    // Добавляем вопрос в историю
+    history[chatId].push({ role: 'user', parts: [{ text: question }] });
 
     try {
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      // Формируем контент для Gemini API
+      const contents = history[chatId].slice(-10).map(item => ({
+        role: item.role,
+        parts: item.parts
+      }));
       const result = await model.generateContent([
-        { role: 'system', content: 'You are a helpful assistant.' },
-        ...history[chatId].slice(-10),
+        { parts: [{ text: 'You are a helpful assistant.' }] },
+        ...contents
       ]);
       const response = await result.response;
       const answer = response.text();
 
-      history[chatId].push({ role: 'assistant', content: answer });
-
+      // Добавляем ответ в историю
+      history[chatId].push({ role: 'model', parts: [{ text: answer }] });
       await saveHistory(history);
 
       await bot.sendMessage(chatId, answer);
