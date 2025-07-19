@@ -1,24 +1,35 @@
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
 const TelegramBot = require('node-telegram-bot-api');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const fs = require('fs').promises;
 require('dotenv').config();
+
 const app = express();
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'YOUR_TELEGRAM_TOKEN7953536048:AAFAgPjN_WoymJ9sM3yYTedzXLjEyts7fuw';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDY3a5xJ5NT5C-h1z8bJH1sLgpc5JkOZAI';
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+const HISTORY_FILE = 'chat_history.json';
 
 app.use(cors());
 app.use(express.json());
 
-app.get('/list-models', async (req, res) => {
+async function loadHistory() {
   try {
-    res.json({ models: [{ id: 'gemini-1.5-flash' }, { id: 'gemini-1.5-pro' }] });
-  } catch (error) {
-    res.status(500).json({ error: `Ошибка: ${error.message}` });
+    const data = await fs.readFile(HISTORY_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch {
+    return {};
   }
+}
+
+async function saveHistory(history) {
+  await fs.writeFile(HISTORY_FILE, JSON.stringify(history, null, 2));
+}
+
+app.get('/list-models', async (req, res) => {
+  res.json({ models: [{ id: 'gemini-1.5-flash' }, { id: 'gemini-1.5-pro' }] });
 });
 
 app.post('/ask-gemini', async (req, res) => {
@@ -36,13 +47,28 @@ app.post('/ask-gemini', async (req, res) => {
 app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
   const { message } = req.body;
   if (message && message.text) {
-    const chatId = message.chat.id;
+    const chatId = message.chat.id.toString();
     const question = message.text;
+
+    const history = await loadHistory();
+    if (!history[chatId]) history[chatId] = [];
+
+    history[chatId].push({ role: 'user', content: question });
+
     try {
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const result = await model.generateContent(question);
+      const result = await model.generateContent([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        ...history[chatId].slice(-10),
+      ]);
       const response = await result.response;
-      await bot.sendMessage(chatId, response.text());
+      const answer = response.text();
+
+      history[chatId].push({ role: 'assistant', content: answer });
+
+      await saveHistory(history);
+
+      await bot.sendMessage(chatId, answer);
     } catch (error) {
       await bot.sendMessage(chatId, `Ошибка: ${error.message}`);
     }
@@ -50,7 +76,7 @@ app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
   res.sendStatus(200);
 });
 
-const WEBHOOK_URL = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'YOUR_VERCEL_URL';
+const WEBHOOK_URL = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://new-grok-bot.vercel.app';
 bot.setWebHook(`${WEBHOOK_URL}/bot${TELEGRAM_TOKEN}`);
 
 app.listen(process.env.PORT || 3000, () => {
