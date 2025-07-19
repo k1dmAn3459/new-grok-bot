@@ -36,7 +36,7 @@ app.post('/ask-gemini', async (req, res) => {
   const { question } = req.body;
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent([{ role: 'user', parts: [{ text: question }] }]);
+    const result = await model.generateContent([{ parts: [{ text: question }] }]);
     const response = await result.response;
     res.json({ answer: response.text() });
   } catch (error) {
@@ -59,7 +59,6 @@ app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
 
     try {
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      // Формируем контент для Gemini API
       const contents = history[chatId].slice(-10).map(item => ({
         role: item.role,
         parts: [{ text: item.parts[0].text }]
